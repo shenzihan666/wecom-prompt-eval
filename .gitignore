@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+prompt_eval_report.md
+eval_pairs.md
