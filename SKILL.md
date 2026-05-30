@@ -118,7 +118,9 @@ $PYEVAL $SK/fetch_turns.py --start "<AFTER_START>"  --end "<AFTER_END>"  --out /
 - `--source auto` (default): reads Grafana `observability.jsonl` mirror first; if a
   window yields `< --min-grafana` turns (e.g. it predates the mirror, deployed
   ~2026-05-28), it **falls back to LangSmith** automatically.
-- `--limit-per-agent N` (default 40) caps samples per agent so scoring stays cheap.
+- `--limit-per-agent N` (**default 0 = fetch ALL turns per agent**). Pass a positive
+  N only if you deliberately want to cap per-agent samples; by default nothing is
+  dropped, so the eval sees every turn in the window.
 - Each output line: `{ts, trace_id, source, agent, stage, intent, confidence,
   model, user_input, last_user_msg, sys_prompt, reply}`.
   - `last_user_msg` — the **verbatim customer turn** that triggered the reply,
@@ -131,14 +133,18 @@ $PYEVAL $SK/fetch_turns.py --start "<AFTER_START>"  --end "<AFTER_END>"  --out /
 ### Step 4 — Score & compare
 
 ```bash
-$PYEVAL $SK/score_compare.py --before /tmp/before.jsonl --after /tmp/after.jsonl --sample 30
+$PYEVAL $SK/score_compare.py --before /tmp/before.jsonl --after /tmp/after.jsonl
 ```
+
+By **default every turn is scored** (`--sample 0`); do **not** pass `--sample 30`
+unless the user explicitly asks to cap the sample — the whole point of this skill
+is to look at *all* the eval data, not a 30-row slice. Only add `--sample N` if a
+window is so large that scoring all pairs is impractical, and say so in the report.
 
 Pass run metadata so the report is self-describing and auditable:
 `--server`, `--upgrade` (anchor time / prompt_id cluster), `--before-raw` /
 `--after-raw` (the pre-sampling turn counts printed by `fetch_turns.py`'s
-`[grafana] N turns` line — rerun with `--limit-per-agent 1000000` to get the true
-window total). Without these the §0 header is blank.
+`[grafana] N turns` line). Without these the §0 header is blank.
 
 - No external LLM (no key). It writes **two** files:
   - **`./prompt_eval_report.md`** (current folder) — the **final report**:
@@ -183,7 +189,8 @@ backbone; the rubric is the subjective layer on top.
        significance descending.
      Show only verbatim snippets + a one-line reason; write 无 for an empty
      bucket. Keep §3 short — the report must **not** contain the full Q&A dump.
-- `--sample N` (default 30) caps pairs per side so scoring stays focused.
+- `--sample N` caps pairs per side; **default 0 = ALL** (score every turn). Only
+  set N>0 if the user explicitly wants a capped sample.
 
 ### Be heuristic — extend on your own when an edge case isn't covered
 
@@ -249,7 +256,7 @@ All scripts live under `scripts/` and ship with the skill (self-contained):
 - `scripts/preflight.sh` — verify external deps (grafana-dash-builder `.env` + connectivity, jq/curl, python+pandas, parquet) before anything else. `PREFLIGHT_SKIP_NET=1` for offline/config-only.
 - `scripts/find_upgrades.sh [lookback_days=45] [gap_s=900]` — enumerate & cluster upgrade points.
 - `scripts/fetch_turns.py --start --end [--source auto|grafana|langsmith] [--out]` — verbatim Q→A turns; also derives `last_user_msg` + `sys_prompt`.
-- `scripts/score_compare.py --before --after [--out ./report.md] [--pairs ./eval_pairs.md] [--sample N] [--server S] [--upgrade STR] [--before-raw N] [--after-raw N] [--keep-fake]` — auto-filters 假提问/非客户提问 (agent opening boilerplate / media-only / system notices; `--keep-fake` to disable) then writes final report (§0 metadata, §1 objective metrics, §1b matched-agent, §1c system_prompt 指令遵循率 = auto-measured compliance rate + violation examples, §2 rubric scaffold, §3 categorized-samples scaffold = 严重违规/退化点/改善点 sorted by severity, §4 auto-caveats) + intermediate pairs with a per-item score table; the running model fills the rubric & categorized examples (no external LLM).
+- `scripts/score_compare.py --before --after [--out ./report.md] [--pairs ./eval_pairs.md] [--sample N (0=ALL, default)] [--server S] [--upgrade STR] [--before-raw N] [--after-raw N] [--keep-fake]` — auto-filters 假提问/非客户提问 (agent opening boilerplate / media-only / system notices; `--keep-fake` to disable) then writes final report (§0 metadata, §1 objective metrics, §1b matched-agent, §1c system_prompt 指令遵循率 = auto-measured compliance rate + violation examples, §2 rubric scaffold, §3 categorized-samples scaffold = 严重违规/退化点/改善点 sorted by severity, §4 auto-caveats) + intermediate pairs with a per-item score table; the running model fills the rubric & categorized examples (no external LLM).
 - `scripts/lib.sh` — shared Loki helper (sourced by find_upgrades.sh).
 
 The objective metrics are a **baseline, not a ceiling** — extend them per the

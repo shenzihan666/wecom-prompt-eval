@@ -23,10 +23,12 @@ It writes TWO files:
       auditable. Used by the model only to score and pick typicals.
 
 Usage:
-  score_compare.py --before before.jsonl --after after.jsonl
-  score_compare.py --before b.jsonl --after a.jsonl --sample 30 \
+  # default: score EVERY turn (no --sample cap)
+  score_compare.py --before before.jsonl --after after.jsonl \
       --server Brain --upgrade "2026-05-29 ~00:45 prompt cluster" \
       --before-raw 191 --after-raw 612
+  # optional: cap pairs per side only if explicitly desired
+  score_compare.py --before b.jsonl --after a.jsonl --sample 30
 """
 from __future__ import annotations
 
@@ -622,7 +624,8 @@ def main() -> None:
                     help="final report path (default: ./prompt_eval_report.md in cwd)")
     ap.add_argument("--pairs", default="eval_pairs.md",
                     help="intermediate file with ALL pairs for scoring (not the final report)")
-    ap.add_argument("--sample", type=int, default=30, help="max pairs per side to present for scoring")
+    ap.add_argument("--sample", type=int, default=0,
+                    help="max pairs per side to present for scoring; 0 = ALL (default, score every turn)")
     ap.add_argument("--server", default=None, help="which server this eval is for (e.g. Brain / weilike)")
     ap.add_argument("--upgrade", default=None, help="upgrade anchor (time / prompt_id cluster)")
     ap.add_argument("--before-raw", type=int, default=None, help="raw turn count before per-agent sampling")
@@ -664,8 +667,10 @@ def main() -> None:
     L.append(f"- 升级后窗口: `{wa['start']} → {wa['end']}`（约 {wa['hours']}h）")
     rawb = args.before_raw if args.before_raw is not None else "未提供"
     rawa = args.after_raw if args.after_raw is not None else "未提供"
-    L.append(f"- 原始 turn 数(采样前): 前 {rawb} / 后 {rawa}；"
-             f"评分采样: 前 {len(bsel)} / 后 {len(asel)}（每侧按 agent 轮转抽样）")
+    sampling_note = ("全部纳入评分（--sample 0，未抽样）" if args.sample <= 0
+                     else f"每侧按 agent 轮转抽样至上限 {args.sample}")
+    L.append(f"- 原始 turn 数(过滤后): 前 {len(before)} / 后 {len(after)}；"
+             f"评分条数: 前 {len(bsel)} / 后 {len(asel)}（{sampling_note}）")
     L.append(f"- 来源: 前 `{qb['by_source']}` / 后 `{qa['by_source']}`")
     if args.keep_fake:
         L.append("- 假提问过滤: **已禁用**（--keep-fake）；非客户提问可能污染 relevance，请人工剔除。")

@@ -290,7 +290,8 @@ def main() -> None:
     ap.add_argument("--start", required=True)
     ap.add_argument("--end", required=True)
     ap.add_argument("--source", choices=["auto", "grafana", "langsmith"], default="auto")
-    ap.add_argument("--limit-per-agent", type=int, default=40)
+    ap.add_argument("--limit-per-agent", type=int, default=0,
+                    help="cap turns per agent; 0 = ALL (default, fetch every turn)")
     ap.add_argument("--min-grafana", type=int, default=20,
                     help="auto: fall back to LangSmith if Grafana yields fewer turns")
     ap.add_argument("--out", default=None)
